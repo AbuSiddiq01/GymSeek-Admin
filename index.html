@@ -367,6 +367,7 @@ tr:hover td{background:var(--accent-soft)}
 
       <div id="fee-pending" class="feePanel">
         <div class="panel">
+          <div class="panelHead"><input class="searchBox" id="pendingSearch" placeholder="🔍 Search name / login ID / phone" oninput="renderPending()"></div>
           <div class="tblWrap"><table><thead><tr><th>Login ID</th><th>Name</th><th>Plan</th><th>Last Paid</th><th>Next Due</th><th>Status</th><th>Actions</th></tr></thead><tbody id="pendingBody"></tbody></table></div>
         </div>
       </div>
@@ -375,7 +376,7 @@ tr:hover td{background:var(--accent-soft)}
         <div class="panel">
           <div class="panelHead" style="flex-wrap:wrap;gap:10px">
             <input type="month" class="searchBox" id="paidMonth" onchange="renderPaid()" style="width:auto">
-            <input class="searchBox" id="paidSearch" placeholder="🔍 Search member" oninput="renderPaid()">
+            <input class="searchBox" id="paidSearch" placeholder="🔍 Search name / login ID / phone" oninput="renderPaid()">
           </div>
           <div class="paidTotalsBar">
             <div class="paidTotalMain">Total: ₹<span id="paidTotal">0</span></div>
@@ -451,7 +452,6 @@ tr:hover td{background:var(--accent-soft)}
   <div class="modalBox" style="max-width:480px">
     <button class="closeX" onclick="closeModal('waQueueModal')">✕</button>
     <h3>WhatsApp Reminders</h3>
-    <div class="pageSub" style="margin-bottom:2px">Tap Send on each member — WhatsApp opens with the message ready, just hit send there.</div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 4px">
       <span class="pill muted" id="waQueueCount">0 / 0 sent</span>
       <button class="linkBtn" onclick="openWaSettings()">⚙ Message settings</button>
@@ -498,7 +498,6 @@ tr:hover td{background:var(--accent-soft)}
       <div class="billCardRow"><span>Next Due Date</span><b id="billOutNextDue">—</b></div>
       <div class="billCardFoot">Generated via GymBro Admin</div>
     </div>
-    <div class="hint" style="margin-bottom:8px">Share downloads the receipt image and opens their WhatsApp chat — browsers can't auto-attach a file to a chat, so just tap 📎 in WhatsApp and pick the downloaded image, then send.</div>
     <div class="modalFoot">
       <button class="btn secondary" onclick="downloadBill()">⬇ Download</button>
       <button class="btn full waBtn" onclick="shareBill()">📤 Share to WhatsApp</button>
@@ -890,8 +889,13 @@ function renderBillPreview(){
   document.getElementById('billOutNextDue').textContent=currentBillData.nextDueDate;
 }
 async function renderBillToCanvas(){
+  await document.fonts.ready; // make sure the display font is loaded before rasterizing
   const el=document.getElementById('billPreviewCard');
-  return await html2canvas(el,{backgroundColor:null,scale:2});
+  // The card's background is a semi-transparent gradient (by design, so it blends with the
+  // modal). html2canvas needs an OPAQUE backdrop matching the modal's own background (#fff) to
+  // composite that correctly — a transparent canvas here is what made the downloaded PNG look
+  // washed-out/flat compared to what's shown on screen.
+  return await html2canvas(el,{backgroundColor:'#ffffff',scale:2,useCORS:true});
 }
 async function downloadBill(){
   try{
@@ -903,30 +907,34 @@ async function downloadBill(){
   }catch(e){showToast('❌ Could not generate image: '+e.message);}
 }
 async function shareBill(){
-  const phone=(document.getElementById('billPhone').value||'').trim();
-  if(!phone){
-    // No number entered — fall back to the generic OS share sheet (admin picks the app/contact).
-    try{
-      const canvas=await renderBillToCanvas();
-      canvas.toBlob(async(blob)=>{
-        const file=new File([blob],`Receipt_${currentBillData.loginId}.png`,{type:'image/png'});
-        if(navigator.canShare&&navigator.canShare({files:[file]})){
+  try{
+    const canvas=await renderBillToCanvas();
+    canvas.toBlob(async(blob)=>{
+      const file=new File([blob],`Receipt_${currentBillData.loginId}.png`,{type:'image/png'});
+      if(navigator.canShare&&navigator.canShare({files:[file]})){
+        // Same as sharing a screenshot: the OS share sheet opens with the image already attached —
+        // admin just picks WhatsApp (and the contact) from there, no manual attach step.
+        try{
           await navigator.share({files:[file],title:'Payment Receipt',text:`Payment receipt for ${currentBillData.memberName}`});
-        }else{
-          downloadBill();
-          showToast('📤 Sharing not supported here — receipt downloaded, attach it manually.');
+          return;
+        }catch(shareErr){
+          if(shareErr&&shareErr.name==='AbortError')return; // admin cancelled the share sheet — do nothing
         }
-      },'image/png');
-    }catch(e){showToast('❌ Could not share: '+e.message);}
-    return;
-  }
-  // A WhatsApp number is set for this bill: download the receipt image (so it's ready to attach)
-  // and open that exact number's WhatsApp chat pre-filled with a message — browsers have no way to
-  // attach a file to a specific WhatsApp chat automatically, so the admin just needs one tap (📎 →
-  // pick the downloaded image → send) inside the chat that's about to open.
-  await downloadBill();
-  const msg=`Hi ${currentBillData.memberName}, here's your payment receipt from ${document.getElementById('billGymName').value.trim()||'the gym'} 🧾\nPlan: ${currentBillData.plan}\nAmount: ₹${currentBillData.amount}\nPaid on: ${currentBillData.paidDate}\nNext due: ${currentBillData.nextDueDate}`;
-  window.open(waLink(phone,msg),'_blank');
+      }
+      // This browser can't share files directly — fall back to downloading the image and, if a
+      // WhatsApp number was entered, opening that exact chat pre-filled with text (image still
+      // needs one manual attach tap here, since that's a WhatsApp platform limit either way).
+      const phone=(document.getElementById('billPhone').value||'').trim();
+      downloadBill();
+      if(phone){
+        const msg=`Hi ${currentBillData.memberName}, here's your payment receipt from ${document.getElementById('billGymName').value.trim()||'the gym'} 🧾\nPlan: ${currentBillData.plan}\nAmount: ₹${currentBillData.amount}\nPaid on: ${currentBillData.paidDate}\nNext due: ${currentBillData.nextDueDate}`;
+        window.open(waLink(phone,msg),'_blank');
+        showToast('📤 Sharing not supported here — receipt downloaded & their chat opened, attach it there.');
+      }else{
+        showToast('📤 Sharing not supported here — receipt downloaded instead.');
+      }
+    },'image/png');
+  }catch(e){showToast('❌ Could not share: '+e.message);}
 }
 function fillPlanSelect(selectId,currentVal){
   const sel=document.getElementById(selectId);
@@ -1292,7 +1300,11 @@ function computePendingList(){
   });
 }
 function renderPending(){
-  const list=computePendingList().filter(p=>p.status!=='ok').sort((a,b)=>a.diffDays-b.diffDays);
+  const q=(document.getElementById('pendingSearch').value||'').toLowerCase();
+  const list=computePendingList()
+    .filter(p=>p.status!=='ok')
+    .filter(p=>!q||String(p.member.login_id).includes(q)||(p.member.name||'').toLowerCase().includes(q)||(p.member.phone||'').includes(q))
+    .sort((a,b)=>a.diffDays-b.diffDays);
   document.getElementById('pendingBody').innerHTML=list.length?list.map(p=>{
     const pill=p.status==='overdue'?`<span class="pill bad">Overdue ${Math.abs(p.diffDays)}d</span>`:p.status==='today'?`<span class="pill warn">Due Today</span>`:`<span class="pill warn">Due in ${p.diffDays}d</span>`;
     return `<tr>
@@ -1404,7 +1416,7 @@ function renderPaid(){
   const month=document.getElementById('paidMonth').value; // "YYYY-MM", blank = all
   const baseRows=allFees.map(f=>({fee:f,member:memberById(f.user_id)}))
     .filter(r=>!month||r.fee.date.startsWith(month))
-    .filter(r=>!q||(r.member&&((r.member.name||'').toLowerCase().includes(q)||String(r.member.login_id).includes(q))));
+    .filter(r=>!q||(r.member&&((r.member.name||'').toLowerCase().includes(q)||String(r.member.login_id).includes(q)||(r.member.phone||'').includes(q))));
   // Totals always reflect the search/month filters, regardless of the Cash/Gpay mode filter.
   const total=baseRows.reduce((s,r)=>s+Number(r.fee.amount||0),0);
   const cashTotal=baseRows.filter(r=>r.fee.payment_mode==='Cash').reduce((s,r)=>s+Number(r.fee.amount||0),0);
