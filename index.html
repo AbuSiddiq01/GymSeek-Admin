@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GymBro Admin</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Bebas+Neue&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 /* ===================== THEME (matches GymBro members app, light theme only) ===================== */
@@ -152,6 +153,8 @@ tr:hover td{background:var(--accent-soft)}
 .mlc-login{font-family:var(--font-alt);font-size:11.5px;color:var(--accent2);font-weight:800;background:var(--accent-soft);padding:2px 8px;border-radius:20px;flex-shrink:0}
 .mlc-name{font-weight:700;color:var(--text-primary);font-size:14px;font-family:var(--font-alt);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mlc-plan{font-size:11.5px;color:var(--text-muted);margin-top:6px;font-family:var(--font-alt);font-weight:600}
+.plc-amount{font-weight:800;color:var(--accent2);font-size:13.5px;font-family:var(--font-alt);margin-left:auto}
+.plc-sub{font-size:11.5px;color:var(--text-muted);margin-top:6px;font-family:var(--font-alt);font-weight:600}
 .member-actions-overlay{width:0;flex-shrink:0;overflow:hidden;opacity:0;display:flex;flex-direction:column;justify-content:center;gap:4px;margin-left:0;transition:width 0.2s ease,opacity 0.2s ease,margin-left 0.2s ease;pointer-events:none}
 .member-log-card.selected-active .member-actions-overlay{width:32px;opacity:1;margin-left:8px;pointer-events:auto}
 .action-icon-btn{width:100%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:var(--accent-soft);border:none;border-radius:8px;cursor:pointer;padding:0;flex-shrink:0;transition:background 0.2s ease}
@@ -169,6 +172,18 @@ tr:hover td{background:var(--accent-soft)}
 .waQueueRow.waSent{opacity:0.55}
 .waQRName{font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:6px}
 .waQRSub{font-size:11.5px;color:var(--text-muted);font-family:var(--font-alt);margin-top:2px}
+
+/* ---- Payment bill/receipt card ---- */
+.billCard{background:linear-gradient(160deg,var(--bg-card),var(--accent-soft));border:1px solid var(--border-col);border-radius:16px;padding:18px 20px;margin:12px 0;font-family:var(--font-alt)}
+.billCardHead{text-align:center;margin-bottom:12px;padding-bottom:12px;border-bottom:2px dashed var(--border-col)}
+.billGymNameOut{font-family:var(--font-display);font-size:20px;color:var(--accent2);letter-spacing:0.5px}
+.billCardTag{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-top:2px}
+.billCardRow{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px;color:var(--text-secondary)}
+.billCardRow b{color:var(--text-primary);font-weight:700}
+.billCardAmount{font-size:16px}
+.billCardAmount b{color:var(--accent2);font-size:18px}
+.billCardDivider{border-top:1px dashed var(--border-col);margin:8px 0}
+.billCardFoot{text-align:center;font-size:10.5px;color:var(--text-muted);margin-top:12px;padding-top:10px;border-top:2px dashed var(--border-col)}
 
 /* ---- Paid-history totals bar ---- */
 .paidTotalsBar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-family:var(--font-alt);margin-bottom:14px;padding:12px 16px;background:var(--accent-soft);border-radius:12px}
@@ -344,6 +359,7 @@ tr:hover td{background:var(--accent-soft)}
         <button class="btn full" onclick="openCollectFee()">💵 Collect Fee</button>
         <button class="btn full waBtn" onclick="openWaQueue()">📱 WhatsApp Reminders</button>
       </div>
+      <div style="margin-bottom:14px"><button class="linkBtn" onclick="syncAllDueDatesToMembersApp()">🔄 Sync due dates to member app (one-time / maintenance)</button></div>
       <div class="tabRow">
         <button class="tabBtn active" data-ftab="pending" onclick="switchFeeTab('pending')">Pending / Overdue</button>
         <button class="tabBtn" data-ftab="paid" onclick="switchFeeTab('paid')">Paid History</button>
@@ -369,7 +385,8 @@ tr:hover td{background:var(--accent-soft)}
               <button class="paidModeBtn" id="paidModeBtnAll" onclick="filterPaidByMode(null)" style="display:none">✕ All Modes</button>
             </div>
           </div>
-          <div class="tblWrap"><table><thead><tr><th>Date</th><th>Login ID</th><th>Name</th><th>Amount</th><th>Mode</th><th>Next Due</th></tr></thead><tbody id="paidBody"></tbody></table></div>
+          <div id="paidBody"></div>
+          <div class="emptyState" id="paidEmpty" style="display:none">No payments recorded for this period.</div>
         </div>
       </div>
     </div>
@@ -460,6 +477,35 @@ tr:hover td{background:var(--accent-soft)}
   </div>
 </div>
 
+<div class="modalOverlay" id="billModal">
+  <div class="modalBox" style="max-width:420px">
+    <button class="closeX" onclick="closeModal('billModal')">✕</button>
+    <h3>🧾 Payment Bill</h3>
+    <div class="field"><label>Gym Name (shown on the bill, remembered next time)</label><input id="billGymName" oninput="renderBillPreview()" placeholder="GYMBRO GYM"></div>
+    <div class="field"><label>WhatsApp Number for this bill (editable — doesn't change the member's saved phone)</label><input id="billPhone" placeholder="e.g. 9876543210" inputmode="tel"></div>
+    <div id="billPreviewCard" class="billCard">
+      <div class="billCardHead">
+        <div class="billGymNameOut" id="billOutGymName">GYMBRO GYM</div>
+        <div class="billCardTag">Payment Receipt</div>
+      </div>
+      <div class="billCardRow"><span>Member</span><b id="billOutName">—</b></div>
+      <div class="billCardRow"><span>Login ID</span><b id="billOutLogin">—</b></div>
+      <div class="billCardRow"><span>Plan</span><b id="billOutPlan">—</b></div>
+      <div class="billCardRow"><span>Payment Mode</span><b id="billOutMode">—</b></div>
+      <div class="billCardRow billCardAmount"><span>Amount Paid</span><b id="billOutAmount">₹0</b></div>
+      <div class="billCardDivider"></div>
+      <div class="billCardRow"><span>Payment Date</span><b id="billOutDate">—</b></div>
+      <div class="billCardRow"><span>Next Due Date</span><b id="billOutNextDue">—</b></div>
+      <div class="billCardFoot">Generated via GymBro Admin</div>
+    </div>
+    <div class="hint" style="margin-bottom:8px">Share downloads the receipt image and opens their WhatsApp chat — browsers can't auto-attach a file to a chat, so just tap 📎 in WhatsApp and pick the downloaded image, then send.</div>
+    <div class="modalFoot">
+      <button class="btn secondary" onclick="downloadBill()">⬇ Download</button>
+      <button class="btn full waBtn" onclick="shareBill()">📤 Share to WhatsApp</button>
+    </div>
+  </div>
+</div>
+
 <div class="modalOverlay" id="feeModal">
   <div class="modalBox">
     <button class="closeX" onclick="closeModal('feeModal')">✕</button>
@@ -480,6 +526,30 @@ tr:hover td{background:var(--accent-soft)}
     </div>
     <div class="modalFoot"><button class="btn full" id="feeSaveBtn" onclick="saveFee()">Save Payment</button></div>
     <div class="errMsg" id="feeModalErr"></div>
+  </div>
+</div>
+
+<div class="modalOverlay" id="viewPaidModal">
+  <div class="modalBox" style="max-width:420px">
+    <button class="closeX" onclick="closeModal('viewPaidModal')">✕</button>
+    <h3>Payment Details</h3>
+    <div id="viewPaidBody"></div>
+  </div>
+</div>
+
+<div class="modalOverlay" id="editPaidModal">
+  <div class="modalBox">
+    <button class="closeX" onclick="closeModal('editPaidModal')">✕</button>
+    <h3>Edit Payment</h3>
+    <div class="field"><label id="editPaidMemberLabel">Member</label></div>
+    <div class="row2">
+      <div class="field"><label>Amount (₹)</label><input type="number" id="epAmount"></div>
+      <div class="field"><label>Payment Date</label><input type="date" id="epDate"></div>
+    </div>
+    <div class="field"><label>Payment Mode</label><select id="epMode"><option value="Cash">Cash</option><option value="Gpay">Gpay</option></select></div>
+    <div class="field"><label>Next Due Date</label><input type="date" id="epNextDue"><div class="hint">Changing this updates member_billing and the member app immediately — no manual sync needed.</div></div>
+    <div class="modalFoot"><button class="btn full" onclick="savePaidEntryEdit()">Save Changes</button></div>
+    <div class="errMsg" id="editPaidErr"></div>
   </div>
 </div>
 
@@ -764,6 +834,100 @@ function renderMembers(){
       </div>
     </div>`).join('');
 }
+/* Pushes the resolved next-due date + amount — and, when a payment was just made, the paid date —
+   straight onto this member's OWN row in the MEMBERS project (current_paid_date / next_due_date /
+   next_due_amount columns on `users`) — this is how the member app (index.html) learns about a
+   pending fee or shows a receipt, without ever holding this admin project's URL/key.
+   Requires these three columns to exist on the members-project `users` table:
+     ALTER TABLE users ADD COLUMN current_paid_date date;
+     ALTER TABLE users ADD COLUMN next_due_date date;
+     ALTER TABLE users ADD COLUMN next_due_amount numeric;
+   Degrades silently (console warning only) if they don't exist yet, same pattern as member_billing.
+   paidDateStr is OPTIONAL — pass it only when an actual payment was just recorded (fee collection);
+   omit it for a due-date-only edit so an unrelated edit never overwrites the last paid date. */
+async function syncMemberDueToMembersApp(memberId,dueDateStr,planName,paidDateStr){
+  const plan=allPlans.find(p=>p.name===planName);
+  const updates={next_due_date:dueDateStr||null,next_due_amount:plan?plan.price:null};
+  if(paidDateStr!==undefined)updates.current_paid_date=paidDateStr||null;
+  const{error}=await membersDB.from('users').update(updates).eq('id',memberId);
+  if(error)console.warn('Could not sync due date to member app (current_paid_date/next_due_date/next_due_amount columns may not exist yet on the members-project users table):',error.message);
+}
+/* One-off/maintenance: recomputes every member's next-due date + last-paid date from scratch (same
+   precedence as computeNextDue) and pushes it onto their row — use after first adding the columns
+   above, or any time you suspect the member app's copy has drifted from the admin panel's own numbers. */
+async function syncAllDueDatesToMembersApp(){
+  if(!confirm(`Sync computed due dates/amounts to the member app for all ${allMembers.length} members now?`))return;
+  showToast('⏳ Syncing due dates…');
+  for(const m of allMembers){
+    const nextDue=computeNextDue(m);
+    const memberFees=allFees.filter(f=>f.user_id===m.id).sort((a,b)=>b.date.localeCompare(a.date));
+    const lastPaid=memberFees.length?memberFees[0].date:null;
+    await syncMemberDueToMembersApp(m.id,localDateStr(nextDue),m.plan,lastPaid);
+  }
+  showToast('✅ Due dates synced to member app');
+}
+/* ===================== PAYMENT BILL / RECEIPT (generated client-side with html2canvas — no server) ===================== */
+let currentBillData=null;
+function openBillModal(bill){
+  currentBillData=bill;
+  const savedGymName=localStorage.getItem('gymbro_gym_name')||'GYMBRO GYM';
+  document.getElementById('billGymName').value=savedGymName;
+  document.getElementById('billPhone').value=bill.phone||'';
+  renderBillPreview();
+  openModal('billModal');
+}
+function renderBillPreview(){
+  if(!currentBillData)return;
+  const gymName=document.getElementById('billGymName').value.trim()||'GYMBRO GYM';
+  localStorage.setItem('gymbro_gym_name',gymName);
+  document.getElementById('billOutGymName').textContent=gymName;
+  document.getElementById('billOutName').textContent=currentBillData.memberName||'—';
+  document.getElementById('billOutLogin').textContent='@'+currentBillData.loginId;
+  document.getElementById('billOutPlan').textContent=currentBillData.plan||'—';
+  document.getElementById('billOutMode').textContent=currentBillData.mode||'—';
+  document.getElementById('billOutAmount').textContent='₹'+currentBillData.amount;
+  document.getElementById('billOutDate').textContent=currentBillData.paidDate;
+  document.getElementById('billOutNextDue').textContent=currentBillData.nextDueDate;
+}
+async function renderBillToCanvas(){
+  const el=document.getElementById('billPreviewCard');
+  return await html2canvas(el,{backgroundColor:null,scale:2});
+}
+async function downloadBill(){
+  try{
+    const canvas=await renderBillToCanvas();
+    const link=document.createElement('a');
+    link.download=`Receipt_${currentBillData.loginId}_${currentBillData.paidDate}.png`;
+    link.href=canvas.toDataURL('image/png');
+    link.click();
+  }catch(e){showToast('❌ Could not generate image: '+e.message);}
+}
+async function shareBill(){
+  const phone=(document.getElementById('billPhone').value||'').trim();
+  if(!phone){
+    // No number entered — fall back to the generic OS share sheet (admin picks the app/contact).
+    try{
+      const canvas=await renderBillToCanvas();
+      canvas.toBlob(async(blob)=>{
+        const file=new File([blob],`Receipt_${currentBillData.loginId}.png`,{type:'image/png'});
+        if(navigator.canShare&&navigator.canShare({files:[file]})){
+          await navigator.share({files:[file],title:'Payment Receipt',text:`Payment receipt for ${currentBillData.memberName}`});
+        }else{
+          downloadBill();
+          showToast('📤 Sharing not supported here — receipt downloaded, attach it manually.');
+        }
+      },'image/png');
+    }catch(e){showToast('❌ Could not share: '+e.message);}
+    return;
+  }
+  // A WhatsApp number is set for this bill: download the receipt image (so it's ready to attach)
+  // and open that exact number's WhatsApp chat pre-filled with a message — browsers have no way to
+  // attach a file to a specific WhatsApp chat automatically, so the admin just needs one tap (📎 →
+  // pick the downloaded image → send) inside the chat that's about to open.
+  await downloadBill();
+  const msg=`Hi ${currentBillData.memberName}, here's your payment receipt from ${document.getElementById('billGymName').value.trim()||'the gym'} 🧾\nPlan: ${currentBillData.plan}\nAmount: ₹${currentBillData.amount}\nPaid on: ${currentBillData.paidDate}\nNext due: ${currentBillData.nextDueDate}`;
+  window.open(waLink(phone,msg),'_blank');
+}
 function fillPlanSelect(selectId,currentVal){
   const sel=document.getElementById(selectId);
   sel.innerHTML='<option value="">— None —</option>'+allPlans.map(p=>`<option value="${escapeHtml(p.name)}" ${p.name===currentVal?'selected':''}>${escapeHtml(p.name)} (₹${p.price} / ${p.duration_months}mo)</option>`).join('');
@@ -815,6 +979,7 @@ async function saveMember(){
     if(customDue){
       const{error:billErr}=await adminDB.from('member_billing').upsert({user_id:editingMemberId,custom_due_date:customDue,updated_at:new Date().toISOString()});
       if(billErr)console.warn('member_billing not saved (table may not exist yet):',billErr.message);
+      await syncMemberDueToMembersApp(editingMemberId,customDue,plan||m.plan);
     }
     showToast('✅ Member updated');
     await loadAllData();renderMembers();
@@ -834,6 +999,7 @@ async function saveMember(){
     if(customDue){
       const{error:billErr}=await adminDB.from('member_billing').upsert({user_id:newId,custom_due_date:customDue,updated_at:new Date().toISOString()});
       if(billErr)console.warn('member_billing not saved (table may not exist yet):',billErr.message);
+      await syncMemberDueToMembersApp(newId,customDue,plan||null);
     }
     document.getElementById('mGeneratedLoginId').style.display='block';
     document.getElementById('mGeneratedLoginId').textContent='✅ Created — Login ID: '+newLoginId;
@@ -1076,9 +1242,20 @@ async function saveFee(){
   const nextDueStr=customOverride||localDateStr(defaultNextDue);
   const{error:billErr}=await adminDB.from('member_billing').upsert({user_id:feeMatchedMember.id,custom_due_date:nextDueStr,updated_at:new Date().toISOString()});
   if(billErr)console.warn('member_billing not updated (table may not exist yet):',billErr.message);
+  await syncMemberDueToMembersApp(feeMatchedMember.id,nextDueStr,selectedPlanName,date);
   showToast('✅ Payment recorded');
   closeModal('feeModal');
   await loadAllData();renderPending();renderPaid();
+  openBillModal({
+    memberName:feeMatchedMember.name,
+    loginId:feeMatchedMember.login_id,
+    phone:feeMatchedMember.phone,
+    plan:plan.name,
+    amount:plan.price,
+    paidDate:date,
+    nextDueDate:nextDueStr,
+    mode
+  });
 }
 function addMonthClamped(date,months,day){
   const d=new Date(date.getFullYear(),date.getMonth()+months,1);
@@ -1217,6 +1394,11 @@ function filterPaidByMode(mode){
   paidModeFilter=(paidModeFilter===mode)?null:mode;
   renderPaid();
 }
+function togglePaidCardSelection(el){
+  const wasActive=el.classList.contains('selected-active');
+  document.querySelectorAll('#paidBody .member-log-card').forEach(c=>c.classList.remove('selected-active'));
+  if(!wasActive)el.classList.add('selected-active');
+}
 function renderPaid(){
   const q=(document.getElementById('paidSearch').value||'').toLowerCase();
   const month=document.getElementById('paidMonth').value; // "YYYY-MM", blank = all
@@ -1236,11 +1418,105 @@ function renderPaid(){
 
   const rows=baseRows.filter(r=>!paidModeFilter||r.fee.payment_mode===paidModeFilter)
     .sort((a,b)=>b.fee.date.localeCompare(a.fee.date));
-  document.getElementById('paidBody').innerHTML=rows.length?rows.map(r=>{
-    const billing=r.member?billingFor(r.member.id):null;
-    const nextDue=(billing&&billing.custom_due_date)?billing.custom_due_date:'—';
-    return `<tr><td>${r.fee.date}</td><td>${r.member?'@'+r.member.login_id:'—'}</td><td>${r.member?escapeHtml(r.member.name):'Unknown'}</td><td>₹${r.fee.amount}</td><td>${escapeHtml(r.fee.payment_mode)}</td><td>${nextDue}</td></tr>`;
-  }).join(''):`<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">${paidModeFilter?'No '+paidModeFilter+' payments recorded for this period.':'No payments recorded for this period.'}</td></tr>`;
+  document.getElementById('paidEmpty').style.display=rows.length?'none':'block';
+  document.getElementById('paidEmpty').textContent=paidModeFilter?`No ${paidModeFilter} payments recorded for this period.`:'No payments recorded for this period.';
+  document.getElementById('paidBody').innerHTML=rows.map(r=>`
+    <div class="member-log-card" tabindex="0" onclick="togglePaidCardSelection(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}">
+      <div class="mlc-box">
+        <div class="mlc-header-row">
+          <span class="mlc-login">@${r.member?r.member.login_id:'—'}</span>
+          <span class="mlc-name">${r.member?escapeHtml(r.member.name):'Unknown'}</span>
+          <span class="plc-amount">₹${r.fee.amount}</span>
+        </div>
+        <div class="plc-sub">${r.fee.date} · ${escapeHtml(r.fee.payment_mode)}</div>
+      </div>
+      <div class="member-actions-overlay">
+        <button class="action-icon-btn view" title="View" onclick="event.stopPropagation();viewPaidEntry('${r.fee.id}')">${ICON_VIEW}</button>
+        <button class="action-icon-btn edit" title="Edit" onclick="event.stopPropagation();openEditPaidEntry('${r.fee.id}')">${ICON_EDIT}</button>
+        <button class="action-icon-btn delete" title="Delete" onclick="event.stopPropagation();deletePaidEntry('${r.fee.id}')">${ICON_DELETE}</button>
+      </div>
+    </div>`).join('');
+}
+
+/* ===================== VIEW / EDIT / DELETE a paid entry — keeps fees, member_billing, AND the
+   member-app copy on the members-project users table (current_paid_date/next_due_date/next_due_amount)
+   all in sync automatically, no manual "sync" step needed for either action. ===================== */
+function viewPaidEntry(feeId){
+  const fee=allFees.find(f=>String(f.id)===String(feeId));
+  if(!fee)return;
+  const member=memberById(fee.user_id);
+  const billing=member?billingFor(member.id):null;
+  document.getElementById('viewPaidBody').innerHTML=`
+    <div class="billCardRow"><span>Member</span><b>${member?escapeHtml(member.name):'Unknown'}</b></div>
+    <div class="billCardRow"><span>Login ID</span><b>${member?'@'+member.login_id:'—'}</b></div>
+    <div class="billCardRow"><span>Amount</span><b>₹${fee.amount}</b></div>
+    <div class="billCardRow"><span>Mode</span><b>${escapeHtml(fee.payment_mode)}</b></div>
+    <div class="billCardRow"><span>Payment Date</span><b>${fee.date}</b></div>
+    <div class="billCardRow"><span>Next Due Date</span><b>${(billing&&billing.custom_due_date)?billing.custom_due_date:'—'}</b></div>`;
+  openModal('viewPaidModal');
+}
+let editingPaidFeeId=null;
+function openEditPaidEntry(feeId){
+  const fee=allFees.find(f=>String(f.id)===String(feeId));
+  if(!fee)return;
+  editingPaidFeeId=fee.id;
+  const member=memberById(fee.user_id);
+  document.getElementById('editPaidMemberLabel').textContent=member?`${member.name} (@${member.login_id})`:'Unknown member';
+  document.getElementById('epAmount').value=fee.amount;
+  document.getElementById('epDate').value=fee.date;
+  document.getElementById('epMode').value=fee.payment_mode;
+  const billing=member?billingFor(member.id):null;
+  document.getElementById('epNextDue').value=(billing&&billing.custom_due_date)?billing.custom_due_date:'';
+  document.getElementById('editPaidErr').textContent='';
+  openModal('editPaidModal');
+}
+async function savePaidEntryEdit(){
+  const fee=allFees.find(f=>f.id===editingPaidFeeId);
+  if(!fee)return;
+  const amount=Number(document.getElementById('epAmount').value);
+  const date=document.getElementById('epDate').value;
+  const mode=document.getElementById('epMode').value;
+  let nextDue=document.getElementById('epNextDue').value;
+  if(!amount||amount<=0||!date){document.getElementById('editPaidErr').textContent='Amount and date are required.';return;}
+  if(!nextDue){
+    const d=new Date(date+'T00:00:00');
+    nextDue=localDateStr(addMonthClamped(d,1,d.getDate()));
+  }
+  const member=memberById(fee.user_id);
+  const{error:feeErr}=await adminDB.from('fees').update({amount,date,payment_mode:mode}).eq('id',fee.id);
+  if(feeErr){document.getElementById('editPaidErr').textContent=feeErr.message;return;}
+  const{error:billErr}=await adminDB.from('member_billing').upsert({user_id:fee.user_id,custom_due_date:nextDue,updated_at:new Date().toISOString()});
+  if(billErr)console.warn('member_billing not updated:',billErr.message);
+  if(member)await syncMemberDueToMembersApp(member.id,nextDue,member.plan,date);
+  closeModal('editPaidModal');
+  showToast('✅ Payment updated');
+  await loadAllData();renderPending();renderPaid();
+}
+async function deletePaidEntry(feeId){
+  const fee=allFees.find(f=>String(f.id)===String(feeId));
+  if(!fee)return;
+  const member=memberById(fee.user_id);
+  if(!confirm(`Delete this ₹${fee.amount} payment from ${fee.date}${member?' for '+member.name:''}? This cannot be undone.`))return;
+  const{error:delErr}=await adminDB.from('fees').delete().eq('id',fee.id);
+  if(delErr){showToast('❌ Could not delete: '+delErr.message);return;}
+  if(member){
+    // Recompute this member's due/last-paid date from whatever fees remain after the delete, and
+    // push the corrected values to member_billing AND the member app — same as a fresh sync.
+    const remaining=allFees.filter(f=>f.user_id===member.id&&f.id!==fee.id).sort((a,b)=>a.date.localeCompare(b.date));
+    const lastRemaining=remaining.length?remaining[remaining.length-1]:null;
+    let newNextDue;
+    if(lastRemaining){
+      const d=new Date(lastRemaining.date+'T00:00:00');
+      newNextDue=localDateStr(addMonthClamped(d,1,d.getDate()));
+    }else{
+      newNextDue=member.join_date||todayStr();
+    }
+    const{error:billErr}=await adminDB.from('member_billing').upsert({user_id:member.id,custom_due_date:newNextDue,updated_at:new Date().toISOString()});
+    if(billErr)console.warn('member_billing not updated after delete:',billErr.message);
+    await syncMemberDueToMembersApp(member.id,newNextDue,member.plan,lastRemaining?lastRemaining.date:null);
+  }
+  showToast('🗑️ Payment deleted');
+  await loadAllData();renderPending();renderPaid();
 }
 
 /* ===================== PLANS ===================== */
