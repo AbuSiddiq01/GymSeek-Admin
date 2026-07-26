@@ -656,6 +656,16 @@ function localDateStr(dateObj){
   const d=String(dateObj.getDate()).padStart(2,'0');
   return `${y}-${m}-${d}`;
 }
+/* Human-readable display format for dates shown to admins/members (e.g. "7 July 2026"), used
+   anywhere a date is shown as TEXT. This is display-only — never use this for <input type="date">
+   values, sorting keys, or DB writes; those must keep using the raw "YYYY-MM-DD" strings
+   (todayStr()/localDateStr()) exactly as before. Accepts either a Date object or a "YYYY-MM-DD" string. */
+function formatDisplayDate(dateOrStr){
+  if(!dateOrStr)return'—';
+  const d=(dateOrStr instanceof Date)?dateOrStr:new Date(dateOrStr+'T00:00:00');
+  if(isNaN(d.getTime()))return String(dateOrStr);
+  return d.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+}
 
 /* ===================== HAMBURGER MENU (mirrors index.html's toggleHamburgerMenu pattern) ===================== */
 function toggleHamburgerMenu(){
@@ -887,8 +897,8 @@ function renderBillPreview(){
   document.getElementById('billOutPlan').textContent=currentBillData.plan||'—';
   document.getElementById('billOutMode').textContent=currentBillData.mode||'—';
   document.getElementById('billOutAmount').textContent='₹'+currentBillData.amount;
-  document.getElementById('billOutDate').textContent=currentBillData.paidDate;
-  document.getElementById('billOutNextDue').textContent=currentBillData.nextDueDate;
+  document.getElementById('billOutDate').textContent=formatDisplayDate(currentBillData.paidDate);
+  document.getElementById('billOutNextDue').textContent=formatDisplayDate(currentBillData.nextDueDate);
 }
 async function renderBillToCanvas(){
   await document.fonts.ready; // make sure the display font is loaded before rasterizing
@@ -1020,13 +1030,13 @@ function viewMember(id){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px;font-size:14px">
       <div><b>Phone:</b> ${escapeHtml(m.phone||'—')}</div>
       <div><b>Plan:</b> ${escapeHtml(m.plan||'—')}</div>
-      <div><b>Joined:</b> ${m.join_date||'—'}</div>
+      <div><b>Joined:</b> ${m.join_date?formatDisplayDate(m.join_date):'—'}</div>
       <div><b>Total Paid:</b> ₹${totalPaid}</div>
     </div>
     <h3 style="font-size:16px;margin-bottom:8px;color:#1e3a8a">Payment History</h3>
     <div class="tblWrap" style="max-height:180px;overflow-y:auto">
       <table><thead><tr><th>Date</th><th>Amount</th><th>Mode</th></tr></thead>
-      <tbody>${fees.length?fees.map(f=>`<tr><td>${f.date}</td><td>₹${f.amount}</td><td>${escapeHtml(f.payment_mode)}</td></tr>`).join(''):'<tr><td colspan="3" style="text-align:center;color:var(--text-muted)">No payments recorded.</td></tr>'}</tbody></table>
+      <tbody>${fees.length?fees.map(f=>`<tr><td>${formatDisplayDate(f.date)}</td><td>₹${f.amount}</td><td>${escapeHtml(f.payment_mode)}</td></tr>`).join(''):'<tr><td colspan="3" style="text-align:center;color:var(--text-muted)">No payments recorded.</td></tr>'}</tbody></table>
     </div>`;
   openModal('viewMemberModal');
 }
@@ -1206,7 +1216,7 @@ function checkFeeDuplicate(){
   if(!last||!sameCalendarMonth(last.date,date)){wrap.style.display='none';saveBtn.disabled=false;return false;}
   const monthLabel=new Date(date+'T00:00:00').toLocaleDateString([],{month:'long',year:'numeric'});
   document.getElementById('feeDupMonth').textContent=monthLabel;
-  document.getElementById('feeDupDate').textContent=last.date;
+  document.getElementById('feeDupDate').textContent=formatDisplayDate(last.date);
   document.getElementById('feeDupAmount').textContent=last.amount;
   wrap.style.display='block';
   saveBtn.disabled=true;
@@ -1297,8 +1307,8 @@ function renderPending(){
       <td>@${p.member.login_id}</td>
       <td>${escapeHtml(p.member.name)}</td>
       <td>${escapeHtml(p.member.plan||'—')}</td>
-      <td>${p.lastPaid?p.lastPaid.date:'Never'}</td>
-      <td>${localDateStr(p.nextDue)}</td>
+      <td>${p.lastPaid?formatDisplayDate(p.lastPaid.date):'Never'}</td>
+      <td>${formatDisplayDate(p.nextDue)}</td>
       <td>${pill}</td>
       <td>
         <button class="linkBtn" onclick="openCollectFeeFor('${p.member.id}')">Collect</button>
@@ -1318,16 +1328,16 @@ function planPriceFor(planName){
   return p?('₹'+p.price):'your due amount';
 }
 function waStatusText(p){
-  if(p.status==='overdue')return`was due on ${localDateStr(p.nextDue)} (${Math.abs(p.diffDays)} day${Math.abs(p.diffDays)===1?'':'s'} overdue)`;
+  if(p.status==='overdue')return`was due on ${formatDisplayDate(p.nextDue)} (${Math.abs(p.diffDays)} day${Math.abs(p.diffDays)===1?'':'s'} overdue)`;
   if(p.status==='today')return'is due today';
-  return`is due on ${localDateStr(p.nextDue)}`;
+  return`is due on ${formatDisplayDate(p.nextDue)}`;
 }
 function waMessageForPending(p){
   return waTemplate
     .replace(/{name}/g,p.member.name||'there')
     .replace(/{plan}/g,p.member.plan||'membership')
     .replace(/{amount}/g,planPriceFor(p.member.plan))
-    .replace(/{due_date}/g,localDateStr(p.nextDue))
+    .replace(/{due_date}/g,formatDisplayDate(p.nextDue))
     .replace(/{status_text}/g,waStatusText(p));
 }
 function waLink(phone,message){
@@ -1426,7 +1436,7 @@ function renderPaid(){
           <span class="mlc-name">${r.member?escapeHtml(r.member.name):'Unknown'}</span>
           <span class="plc-amount">₹${r.fee.amount}</span>
         </div>
-        <div class="plc-sub">${r.fee.date} · ${escapeHtml(r.fee.payment_mode)}</div>
+        <div class="plc-sub">${formatDisplayDate(r.fee.date)} · ${escapeHtml(r.fee.payment_mode)}</div>
       </div>
       <div class="member-actions-overlay">
         <button class="action-icon-btn view" title="View" onclick="event.stopPropagation();viewPaidEntry('${r.fee.id}')">${ICON_VIEW}</button>
@@ -1449,8 +1459,8 @@ function viewPaidEntry(feeId){
     <div class="billCardRow"><span>Login ID</span><b>${member?'@'+member.login_id:'—'}</b></div>
     <div class="billCardRow"><span>Amount</span><b>₹${fee.amount}</b></div>
     <div class="billCardRow"><span>Mode</span><b>${escapeHtml(fee.payment_mode)}</b></div>
-    <div class="billCardRow"><span>Payment Date</span><b>${fee.date}</b></div>
-    <div class="billCardRow"><span>Next Due Date</span><b>${(billing&&billing.custom_due_date)?billing.custom_due_date:'—'}</b></div>`;
+    <div class="billCardRow"><span>Payment Date</span><b>${formatDisplayDate(fee.date)}</b></div>
+    <div class="billCardRow"><span>Next Due Date</span><b>${(billing&&billing.custom_due_date)?formatDisplayDate(billing.custom_due_date):'—'}</b></div>`;
   openModal('viewPaidModal');
 }
 let editingPaidFeeId=null;
@@ -1494,7 +1504,7 @@ async function deletePaidEntry(feeId){
   const fee=allFees.find(f=>String(f.id)===String(feeId));
   if(!fee)return;
   const member=memberById(fee.user_id);
-  if(!confirm(`Delete this ₹${fee.amount} payment from ${fee.date}${member?' for '+member.name:''}? This cannot be undone.`))return;
+  if(!confirm(`Delete this ₹${fee.amount} payment from ${formatDisplayDate(fee.date)}${member?' for '+member.name:''}? This cannot be undone.`))return;
   const{error:delErr}=await adminDB.from('fees').delete().eq('id',fee.id);
   if(delErr){showToast('❌ Could not delete: '+delErr.message);return;}
   if(member){
