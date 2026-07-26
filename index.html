@@ -173,17 +173,19 @@ tr:hover td{background:var(--accent-soft)}
 .waQRName{font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:6px}
 .waQRSub{font-size:11.5px;color:var(--text-muted);font-family:var(--font-alt);margin-top:2px}
 
-/* ---- Payment bill/receipt card ---- */
-.billCard{background:linear-gradient(160deg,var(--bg-card),var(--accent-soft));border:1px solid var(--border-col);border-radius:16px;padding:18px 20px;margin:12px 0;font-family:var(--font-alt)}
-.billCardHead{text-align:center;margin-bottom:12px;padding-bottom:12px;border-bottom:2px dashed var(--border-col)}
-.billGymNameOut{font-family:var(--font-display);font-size:20px;color:var(--accent2);letter-spacing:0.5px}
-.billCardTag{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-top:2px}
-.billCardRow{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px;color:var(--text-secondary)}
-.billCardRow b{color:var(--text-primary);font-weight:700}
+/* ---- Payment bill/receipt card (deliberately FIXED/literal colors, not theme variables — this
+   guarantees the downloaded PNG matches what's on screen pixel-for-pixel, since html2canvas can
+   struggle to correctly composite semi-transparent theme colors) ---- */
+.billCard{background:#eef2ff;border:1px solid #c7d2fe;border-radius:16px;padding:18px 20px;margin:12px 0;font-family:'Rajdhani',sans-serif}
+.billCardHead{text-align:center;margin-bottom:12px;padding-bottom:12px;border-bottom:2px dashed #c7d2fe}
+.billGymNameOut{font-family:'Bebas Neue',sans-serif;font-size:20px;color:#1d4ed8;letter-spacing:0.5px}
+.billCardTag{font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-top:2px}
+.billCardRow{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px;color:#475569}
+.billCardRow b{color:#0f172a;font-weight:700}
 .billCardAmount{font-size:16px}
-.billCardAmount b{color:var(--accent2);font-size:18px}
-.billCardDivider{border-top:1px dashed var(--border-col);margin:8px 0}
-.billCardFoot{text-align:center;font-size:10.5px;color:var(--text-muted);margin-top:12px;padding-top:10px;border-top:2px dashed var(--border-col)}
+.billCardAmount b{color:#1d4ed8;font-size:18px}
+.billCardDivider{border-top:1px dashed #c7d2fe;margin:8px 0}
+.billCardFoot{text-align:center;font-size:10.5px;color:#94a3b8;margin-top:12px;padding-top:10px;border-top:2px dashed #c7d2fe}
 
 /* ---- Paid-history totals bar ---- */
 .paidTotalsBar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-family:var(--font-alt);margin-bottom:14px;padding:12px 16px;background:var(--accent-soft);border-radius:12px}
@@ -367,6 +369,7 @@ tr:hover td{background:var(--accent-soft)}
 
       <div id="fee-pending" class="feePanel">
         <div class="panel">
+          <div class="panelHead"><input class="searchBox" id="pendingSearch" placeholder="🔍 Search name / login ID / phone" oninput="renderPending()"></div>
           <div class="tblWrap"><table><thead><tr><th>Login ID</th><th>Name</th><th>Plan</th><th>Last Paid</th><th>Next Due</th><th>Status</th><th>Actions</th></tr></thead><tbody id="pendingBody"></tbody></table></div>
         </div>
       </div>
@@ -375,7 +378,7 @@ tr:hover td{background:var(--accent-soft)}
         <div class="panel">
           <div class="panelHead" style="flex-wrap:wrap;gap:10px">
             <input type="month" class="searchBox" id="paidMonth" onchange="renderPaid()" style="width:auto">
-            <input class="searchBox" id="paidSearch" placeholder="🔍 Search member" oninput="renderPaid()">
+            <input class="searchBox" id="paidSearch" placeholder="🔍 Search name / login ID / phone" oninput="renderPaid()">
           </div>
           <div class="paidTotalsBar">
             <div class="paidTotalMain">Total: ₹<span id="paidTotal">0</span></div>
@@ -451,7 +454,6 @@ tr:hover td{background:var(--accent-soft)}
   <div class="modalBox" style="max-width:480px">
     <button class="closeX" onclick="closeModal('waQueueModal')">✕</button>
     <h3>WhatsApp Reminders</h3>
-    <div class="pageSub" style="margin-bottom:2px">Tap Send on each member — WhatsApp opens with the message ready, just hit send there.</div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 4px">
       <span class="pill muted" id="waQueueCount">0 / 0 sent</span>
       <button class="linkBtn" onclick="openWaSettings()">⚙ Message settings</button>
@@ -498,7 +500,6 @@ tr:hover td{background:var(--accent-soft)}
       <div class="billCardRow"><span>Next Due Date</span><b id="billOutNextDue">—</b></div>
       <div class="billCardFoot">Generated via GymBro Admin</div>
     </div>
-    <div class="hint" style="margin-bottom:8px">Share downloads the receipt image and opens their WhatsApp chat — browsers can't auto-attach a file to a chat, so just tap 📎 in WhatsApp and pick the downloaded image, then send.</div>
     <div class="modalFoot">
       <button class="btn secondary" onclick="downloadBill()">⬇ Download</button>
       <button class="btn full waBtn" onclick="shareBill()">📤 Share to WhatsApp</button>
@@ -890,8 +891,13 @@ function renderBillPreview(){
   document.getElementById('billOutNextDue').textContent=currentBillData.nextDueDate;
 }
 async function renderBillToCanvas(){
+  await document.fonts.ready; // make sure the display font is loaded before rasterizing
   const el=document.getElementById('billPreviewCard');
-  return await html2canvas(el,{backgroundColor:null,scale:2});
+  // The card's background is a semi-transparent gradient (by design, so it blends with the
+  // modal). html2canvas needs an OPAQUE backdrop matching the modal's own background (#fff) to
+  // composite that correctly — a transparent canvas here is what made the downloaded PNG look
+  // washed-out/flat compared to what's shown on screen.
+  return await html2canvas(el,{backgroundColor:'#ffffff',scale:2,useCORS:true});
 }
 async function downloadBill(){
   try{
@@ -904,27 +910,15 @@ async function downloadBill(){
 }
 async function shareBill(){
   const phone=(document.getElementById('billPhone').value||'').trim();
+  await downloadBill();
   if(!phone){
-    // No number entered — fall back to the generic OS share sheet (admin picks the app/contact).
-    try{
-      const canvas=await renderBillToCanvas();
-      canvas.toBlob(async(blob)=>{
-        const file=new File([blob],`Receipt_${currentBillData.loginId}.png`,{type:'image/png'});
-        if(navigator.canShare&&navigator.canShare({files:[file]})){
-          await navigator.share({files:[file],title:'Payment Receipt',text:`Payment receipt for ${currentBillData.memberName}`});
-        }else{
-          downloadBill();
-          showToast('📤 Sharing not supported here — receipt downloaded, attach it manually.');
-        }
-      },'image/png');
-    }catch(e){showToast('❌ Could not share: '+e.message);}
+    showToast('📤 Receipt downloaded — enter a WhatsApp number above to also open their chat directly.');
     return;
   }
-  // A WhatsApp number is set for this bill: download the receipt image (so it's ready to attach)
-  // and open that exact number's WhatsApp chat pre-filled with a message — browsers have no way to
-  // attach a file to a specific WhatsApp chat automatically, so the admin just needs one tap (📎 →
-  // pick the downloaded image → send) inside the chat that's about to open.
-  await downloadBill();
+  // wa.me opens that exact number's chat directly — works even for numbers that aren't saved as a
+  // contact, unlike the OS share sheet's contact picker. Browsers still can't auto-attach a file to
+  // a specific chat (a WhatsApp platform limit, not something any provider can bypass), so the
+  // downloaded image just needs one manual attach tap once the chat opens.
   const msg=`Hi ${currentBillData.memberName}, here's your payment receipt from ${document.getElementById('billGymName').value.trim()||'the gym'} 🧾\nPlan: ${currentBillData.plan}\nAmount: ₹${currentBillData.amount}\nPaid on: ${currentBillData.paidDate}\nNext due: ${currentBillData.nextDueDate}`;
   window.open(waLink(phone,msg),'_blank');
 }
@@ -1292,7 +1286,11 @@ function computePendingList(){
   });
 }
 function renderPending(){
-  const list=computePendingList().filter(p=>p.status!=='ok').sort((a,b)=>a.diffDays-b.diffDays);
+  const q=(document.getElementById('pendingSearch').value||'').toLowerCase();
+  const list=computePendingList()
+    .filter(p=>p.status!=='ok')
+    .filter(p=>!q||String(p.member.login_id).includes(q)||(p.member.name||'').toLowerCase().includes(q)||(p.member.phone||'').includes(q))
+    .sort((a,b)=>a.diffDays-b.diffDays);
   document.getElementById('pendingBody').innerHTML=list.length?list.map(p=>{
     const pill=p.status==='overdue'?`<span class="pill bad">Overdue ${Math.abs(p.diffDays)}d</span>`:p.status==='today'?`<span class="pill warn">Due Today</span>`:`<span class="pill warn">Due in ${p.diffDays}d</span>`;
     return `<tr>
@@ -1404,7 +1402,7 @@ function renderPaid(){
   const month=document.getElementById('paidMonth').value; // "YYYY-MM", blank = all
   const baseRows=allFees.map(f=>({fee:f,member:memberById(f.user_id)}))
     .filter(r=>!month||r.fee.date.startsWith(month))
-    .filter(r=>!q||(r.member&&((r.member.name||'').toLowerCase().includes(q)||String(r.member.login_id).includes(q))));
+    .filter(r=>!q||(r.member&&((r.member.name||'').toLowerCase().includes(q)||String(r.member.login_id).includes(q)||(r.member.phone||'').includes(q))));
   // Totals always reflect the search/month filters, regardless of the Cash/Gpay mode filter.
   const total=baseRows.reduce((s,r)=>s+Number(r.fee.amount||0),0);
   const cashTotal=baseRows.filter(r=>r.fee.payment_mode==='Cash').reduce((s,r)=>s+Number(r.fee.amount||0),0);
