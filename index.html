@@ -521,20 +521,12 @@ tr:hover td{background:var(--accent-soft)}
       <div class="field"><label>Date</label><input type="date" id="feeDate" onchange="checkFeeDuplicate()"></div>
     </div>
     <div class="field"><label>Payment Mode</label><select id="feeMode"><option value="Cash">Cash</option><option value="Gpay">Gpay</option></select></div>
-    <div class="field"><label>Next Due Date (optional override)</label><input type="date" id="feeCustomDue"><div class="hint">Leave blank to bill the same date next month by default. Set this to override.</div></div>
+    <div class="field"><label>Next Due Date (optional override)</label><input type="date" id="feeCustomDue"><div class="hint">Leave blank to bill this member automatically based on the selected plan's duration (e.g. Monthly → +1 month, Quarterly → +3 months, Yearly → +12 months). Set this to override.</div></div>
     <div id="feeDupWrap" style="display:none;background:var(--danger-soft);color:#991b1b;padding:10px 12px;border-radius:10px;font-size:12.5px;font-weight:600;line-height:1.5;margin-bottom:14px">
       ⚠ Already paid for <span id="feeDupMonth"></span> — last payment <span id="feeDupDate"></span> (₹<span id="feeDupAmount"></span>). Pick a date in a different month to collect the next payment.
     </div>
     <div class="modalFoot"><button class="btn full" id="feeSaveBtn" onclick="saveFee()">Save Payment</button></div>
     <div class="errMsg" id="feeModalErr"></div>
-  </div>
-</div>
-
-<div class="modalOverlay" id="viewPaidModal">
-  <div class="modalBox" style="max-width:420px">
-    <button class="closeX" onclick="closeModal('viewPaidModal')">✕</button>
-    <h3>Payment Details</h3>
-    <div id="viewPaidBody"></div>
   </div>
 </div>
 
@@ -1238,11 +1230,13 @@ async function saveFee(){
     const{error:planErr}=await membersDB.from('users').update({plan:plan.name}).eq('id',feeMatchedMember.id);
     if(planErr)console.warn('Could not update member plan:',planErr.message);
   }
-  // Keep exactly one member_billing row per member: default next due = same date next month,
-  // unless the admin picked a custom override right here in the modal.
+  // Keep exactly one member_billing row per member: default next due = same date, N months later
+  // where N is THIS plan's own duration_months (Monthly=1, Quarterly=3, Yearly=12, or whatever the
+  // admin set when creating/editing the plan) — unless the admin picked a custom override here.
   const customOverride=document.getElementById('feeCustomDue').value;
   const paidDate=new Date(date+'T00:00:00');
-  const defaultNextDue=addMonthClamped(paidDate,1,paidDate.getDate());
+  const planMonths=Number(plan.duration_months)||1;
+  const defaultNextDue=addMonthClamped(paidDate,planMonths,paidDate.getDate());
   const nextDueStr=customOverride||localDateStr(defaultNextDue);
   const{error:billErr}=await adminDB.from('member_billing').upsert({user_id:feeMatchedMember.id,custom_due_date:nextDueStr,updated_at:new Date().toISOString()});
   if(billErr)console.warn('member_billing not updated (table may not exist yet):',billErr.message);
@@ -1278,9 +1272,10 @@ function computeNextDue(member){
   // member_billing table was only just created).
   const memberFees=feesFor(member.id).slice().sort((a,b)=>a.date.localeCompare(b.date));
   const lastPaid=memberFees.length?memberFees[memberFees.length-1]:null;
+  const planMonths=Number(planFor(member)?.duration_months)||1;
   if(lastPaid){
     const lastPaidDate=new Date(lastPaid.date+'T00:00:00');
-    return addMonthClamped(lastPaidDate,1,lastPaidDate.getDate());
+    return addMonthClamped(lastPaidDate,planMonths,lastPaidDate.getDate());
   }
   return new Date((member.join_date||todayStr())+'T00:00:00'); // never paid -> billed from join date
 }
@@ -1454,14 +1449,19 @@ function viewPaidEntry(feeId){
   if(!fee)return;
   const member=memberById(fee.user_id);
   const billing=member?billingFor(member.id):null;
-  document.getElementById('viewPaidBody').innerHTML=`
-    <div class="billCardRow"><span>Member</span><b>${member?escapeHtml(member.name):'Unknown'}</b></div>
-    <div class="billCardRow"><span>Login ID</span><b>${member?'@'+member.login_id:'—'}</b></div>
-    <div class="billCardRow"><span>Amount</span><b>₹${fee.amount}</b></div>
-    <div class="billCardRow"><span>Mode</span><b>${escapeHtml(fee.payment_mode)}</b></div>
-    <div class="billCardRow"><span>Payment Date</span><b>${formatDisplayDate(fee.date)}</b></div>
-    <div class="billCardRow"><span>Next Due Date</span><b>${(billing&&billing.custom_due_date)?formatDisplayDate(billing.custom_due_date):'—'}</b></div>`;
-  openModal('viewPaidModal');
+  // Same shape openBillModal() expects when a NEW payment is collected — reused here so a
+  // previously-recorded payment renders as the exact same downloadable/shareable bill, always
+  // built fresh from the live fee/member/billing rows (so edits are reflected immediately).
+  openBillModal({
+    memberName:member?member.name:'Unknown',
+    loginId:member?member.login_id:'',
+    phone:member?member.phone:'',
+    plan:member?member.plan:'—',
+    amount:fee.amount,
+    paidDate:fee.date,
+    nextDueDate:(billing&&billing.custom_due_date)?billing.custom_due_date:'',
+    mode:fee.payment_mode
+  });
 }
 let editingPaidFeeId=null;
 function openEditPaidEntry(feeId){
@@ -1486,11 +1486,12 @@ async function savePaidEntryEdit(){
   const mode=document.getElementById('epMode').value;
   let nextDue=document.getElementById('epNextDue').value;
   if(!amount||amount<=0||!date){document.getElementById('editPaidErr').textContent='Amount and date are required.';return;}
+  const member=memberById(fee.user_id);
   if(!nextDue){
     const d=new Date(date+'T00:00:00');
-    nextDue=localDateStr(addMonthClamped(d,1,d.getDate()));
+    const planMonths=Number(planFor(member)?.duration_months)||1;
+    nextDue=localDateStr(addMonthClamped(d,planMonths,d.getDate()));
   }
-  const member=memberById(fee.user_id);
   const{error:feeErr}=await adminDB.from('fees').update({amount,date,payment_mode:mode}).eq('id',fee.id);
   if(feeErr){document.getElementById('editPaidErr').textContent=feeErr.message;return;}
   const{error:billErr}=await adminDB.from('member_billing').upsert({user_id:fee.user_id,custom_due_date:nextDue,updated_at:new Date().toISOString()});
@@ -1515,7 +1516,8 @@ async function deletePaidEntry(feeId){
     let newNextDue;
     if(lastRemaining){
       const d=new Date(lastRemaining.date+'T00:00:00');
-      newNextDue=localDateStr(addMonthClamped(d,1,d.getDate()));
+      const planMonths=Number(planFor(member)?.duration_months)||1;
+      newNextDue=localDateStr(addMonthClamped(d,planMonths,d.getDate()));
     }else{
       newNextDue=member.join_date||todayStr();
     }
