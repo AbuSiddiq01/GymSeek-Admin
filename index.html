@@ -50,6 +50,12 @@ input,select{font-family:var(--font-body)}
 
 /* ===================== APP SHELL ===================== */
 #app{display:none;min-height:100vh}
+#appLoadingOverlay{position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;background:var(--bg-body,#f4f6fb)}
+.appLoadBox{display:flex;flex-direction:column;align-items:center;gap:14px;padding:24px;text-align:center}
+.appLoadSpinner{width:38px;height:38px;border-radius:50%;border:3.5px solid var(--accent-soft,#dbeafe);border-top-color:var(--accent,#2563eb);animation:appLoadSpin 0.8s linear infinite}
+.appLoadIcon{font-size:34px}
+.appLoadText{font-family:var(--font-alt);font-weight:700;font-size:13.5px;color:var(--text-secondary,#475569);max-width:260px}
+@keyframes appLoadSpin{to{transform:rotate(360deg)}}
 #mainArea{padding:16px 18px 60px;max-width:900px;margin:0 auto}
 
 /* ---- Top banner (mirrors index.html's .gymbroTop / .gymbroTopSolo) ---- */
@@ -133,6 +139,16 @@ table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;padding:9px 10px;color:var(--text-muted);font-family:var(--font-alt);font-weight:700;font-size:11px;letter-spacing:0.5px;text-transform:uppercase;border-bottom:2px solid var(--border-col);white-space:nowrap}
 td{padding:10px 10px;border-bottom:1px solid var(--border-col);white-space:nowrap}
 tr:hover td{background:var(--accent-soft)}
+/* ---- card-style table rows (same table markup/columns/order — only the row's visual style
+   changes to match the .mlc-box card look used in Paid History) ---- */
+table.cardTable{border-collapse:separate;border-spacing:0 10px}
+table.cardTable thead th{border-bottom:none;padding:0 14px 2px}
+table.cardTable tbody tr{background:var(--bg-card);transition:transform 0.25s cubic-bezier(0.4,0,0.2,1),box-shadow 0.25s cubic-bezier(0.4,0,0.2,1)}
+table.cardTable tbody tr:hover{transform:translateY(-3px);box-shadow:0 10px 22px var(--accent-glow)}
+table.cardTable tbody tr:hover td{background:none}
+table.cardTable tbody td{padding:12px 14px;border-bottom:1px solid var(--border-col);border-top:1px solid var(--border-col)}
+table.cardTable tbody td:first-child{border-left:3px solid var(--accent);border-top-left-radius:10px;border-bottom-left-radius:10px}
+table.cardTable tbody td:last-child{border-right:1px solid var(--border-col);border-top-right-radius:10px;border-bottom-right-radius:10px}
 .pill{display:inline-block;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:0.3px}
 .pill.ok{background:var(--success-soft);color:#166534}
 .pill.warn{background:var(--warning-soft);color:#92400e}
@@ -153,8 +169,11 @@ tr:hover td{background:var(--accent-soft)}
 .mlc-login{font-family:var(--font-alt);font-size:11.5px;color:var(--accent2);font-weight:800;background:var(--accent-soft);padding:2px 8px;border-radius:20px;flex-shrink:0}
 .mlc-name{font-weight:700;color:var(--text-primary);font-size:14px;font-family:var(--font-alt);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mlc-plan{font-size:11.5px;color:var(--text-muted);margin-top:6px;font-family:var(--font-alt);font-weight:600}
-.plc-amount{font-weight:800;color:var(--accent2);font-size:13.5px;font-family:var(--font-alt);margin-left:auto}
-.plc-sub{font-size:11.5px;color:var(--text-muted);margin-top:6px;font-family:var(--font-alt);font-weight:600}
+.plan-badge{display:inline-block;padding:2px 9px;border-radius:7px;font-size:10px;font-weight:700;font-family:var(--font-alt);color:#fff;letter-spacing:0.2px}
+.plc-amount-wrap{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.plc-amount{font-weight:800;color:var(--accent2);font-size:13.5px;font-family:var(--font-alt)}
+.plc-mode{font-size:10px;color:var(--text-muted);font-weight:700;font-family:var(--font-alt);letter-spacing:0.3px}
+.plc-sub{font-size:11.5px;color:var(--text-muted);margin-top:6px;font-family:var(--font-alt);font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .member-actions-overlay{width:0;flex-shrink:0;overflow:hidden;opacity:0;display:flex;flex-direction:column;justify-content:center;gap:4px;margin-left:0;transition:width 0.2s ease,opacity 0.2s ease,margin-left 0.2s ease;pointer-events:none}
 .member-log-card.selected-active .member-actions-overlay{width:32px;opacity:1;margin-left:8px;pointer-events:auto}
 .action-icon-btn{width:100%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:var(--accent-soft);border:none;border-radius:8px;cursor:pointer;padding:0;flex-shrink:0;transition:background 0.2s ease}
@@ -231,6 +250,16 @@ tr:hover td{background:var(--accent-soft)}
 </head>
 <body>
 
+<!-- ===================== APP LOAD OVERLAY (Loading / Slow network / Disconnected) ===================== -->
+<div id="appLoadingOverlay">
+  <div class="appLoadBox">
+    <div id="appLoadingSpinner" class="appLoadSpinner"></div>
+    <div id="appLoadingIcon" class="appLoadIcon" style="display:none">📡</div>
+    <div id="appLoadingText" class="appLoadText">Loading your dashboard…</div>
+    <button id="appLoadRetryBtn" class="btn" style="display:none" onclick="retryAppLoad()">Retry</button>
+  </div>
+</div>
+
 <!-- ===================== LOGIN ===================== -->
 <div id="loginScreen">
   <div class="loginBox">
@@ -287,7 +316,7 @@ tr:hover td{background:var(--accent-soft)}
             </select>
           </div>
         </div>
-        <div class="tblWrap"><table><thead><tr><th>Login ID</th><th>Name</th><th>Time</th><th>Status</th></tr></thead><tbody id="dashTodayBody"></tbody></table></div>
+        <div class="tblWrap"><table class="cardTable"><thead><tr><th>Login ID</th><th>Name</th><th>Time</th><th>Status</th></tr></thead><tbody id="dashTodayBody"></tbody></table></div>
       </div>
     </div>
 
@@ -332,7 +361,7 @@ tr:hover td{background:var(--accent-soft)}
               <input type="checkbox" id="dailyHighDurToggle" onchange="renderDailyTable()"> Highest duration first
             </label>
           </div>
-          <div class="tblWrap"><table><thead><tr><th>Login ID</th><th>Name</th><th>Check-In</th><th>Status</th><th>Duration</th><th>Exercise</th><th>Class</th></tr></thead><tbody id="dailyBody"></tbody></table></div>
+          <div class="tblWrap"><table class="cardTable"><thead><tr><th>Login ID</th><th>Name</th><th>Check-In</th><th>Status</th><th>Duration</th><th>Exercise</th><th>Class</th></tr></thead><tbody id="dailyBody"></tbody></table></div>
           <div class="emptyState" id="dailyEmpty" style="display:none">No check-ins on this date.</div>
         </div>
       </div>
@@ -340,14 +369,14 @@ tr:hover td{background:var(--accent-soft)}
       <div id="att-weekly" class="attPanel" style="display:none">
         <div class="panel">
           <div class="panelHead"><input type="date" class="searchBox" id="weeklyDate" onchange="loadWeekly()"><span class="pageSub" id="weeklyRangeLabel"></span></div>
-          <div class="tblWrap"><table><thead><tr id="weeklyHead"></tr></thead><tbody id="weeklyBody"></tbody></table></div>
+          <div class="tblWrap"><table class="cardTable"><thead><tr id="weeklyHead"></tr></thead><tbody id="weeklyBody"></tbody></table></div>
         </div>
       </div>
 
       <div id="att-monthly" class="attPanel" style="display:none">
         <div class="panel">
           <div class="panelHead"><input type="month" class="searchBox" id="monthlyMonth" onchange="loadMonthly()"></div>
-          <div class="tblWrap"><table><thead><tr id="monthlyHead"></tr></thead><tbody id="monthlyBody"></tbody></table></div>
+          <div class="tblWrap"><table class="cardTable"><thead><tr id="monthlyHead"></tr></thead><tbody id="monthlyBody"></tbody></table></div>
         </div>
       </div>
     </div>
@@ -369,8 +398,14 @@ tr:hover td{background:var(--accent-soft)}
 
       <div id="fee-pending" class="feePanel">
         <div class="panel">
-          <div class="panelHead"><input class="searchBox" id="pendingSearch" placeholder="🔍 Search name / login ID / phone" oninput="renderPending()"></div>
-          <div class="tblWrap"><table><thead><tr><th>Login ID</th><th>Name</th><th>Plan</th><th>Last Paid</th><th>Next Due</th><th>Status</th><th>Actions</th></tr></thead><tbody id="pendingBody"></tbody></table></div>
+          <div class="panelHead" style="flex-wrap:wrap;gap:10px">
+            <select class="searchBox" id="pendingViewMode" style="width:auto" onchange="renderPending()">
+              <option value="pending">Pending</option>
+              <option value="all">All</option>
+            </select>
+            <input class="searchBox" id="pendingSearch" placeholder="🔍 Search name / login ID / phone" oninput="renderPending()">
+          </div>
+          <div class="tblWrap"><table class="cardTable"><thead><tr><th>Login ID</th><th>Name</th><th>Plan</th><th>Last Paid</th><th>Next Due</th><th>Status</th><th>Actions</th></tr></thead><tbody id="pendingBody"></tbody></table></div>
         </div>
       </div>
 
@@ -401,7 +436,7 @@ tr:hover td{background:var(--accent-soft)}
       </div>
       <div class="topActions" style="margin-bottom:14px"><button class="btn full" onclick="openAddPlan()">➕ Add Plan</button></div>
       <div class="panel">
-        <div class="tblWrap"><table><thead><tr><th>Name</th><th>Price</th><th>Duration (months)</th><th>Actions</th></tr></thead><tbody id="plansBody"></tbody></table></div>
+        <div class="tblWrap"><table class="cardTable"><thead><tr><th>Name</th><th>Price</th><th>Duration (months)</th><th>Actions</th></tr></thead><tbody id="plansBody"></tbody></table></div>
       </div>
     </div>
 
@@ -412,7 +447,7 @@ tr:hover td{background:var(--accent-soft)}
       </div>
       <div class="topActions" style="margin-bottom:14px"><button class="btn full" onclick="openAddAdmin()">➕ Add Admin</button></div>
       <div class="panel">
-        <div class="tblWrap"><table><thead><tr><th>Username</th><th>Actions</th></tr></thead><tbody id="adminsBody"></tbody></table></div>
+        <div class="tblWrap"><table class="cardTable"><thead><tr><th>Username</th><th>Actions</th></tr></thead><tbody id="adminsBody"></tbody></table></div>
       </div>
       <div class="panel">
         <h3 style="margin-bottom:14px">Change My Password</h3>
@@ -517,7 +552,7 @@ tr:hover td{background:var(--accent-soft)}
       <div class="field"><label>Plan (assign / change — optional)</label><select id="feePlanSelect" onchange="onFeePlanChange()"></select></div>
     </div>
     <div class="row2">
-      <div class="field"><label>Amount (₹)</label><input id="feeAmount" readonly></div>
+      <div class="field"><label>Amount (₹)</label><input type="number" id="feeAmount"><div class="hint">Auto-fills from the plan price — edit for discounts/adjustments.</div></div>
       <div class="field"><label>Date</label><input type="date" id="feeDate" onchange="checkFeeDuplicate()"></div>
     </div>
     <div class="field"><label>Payment Mode</label><select id="feeMode"><option value="Cash">Cash</option><option value="Gpay">Gpay</option></select></div>
@@ -536,10 +571,13 @@ tr:hover td{background:var(--accent-soft)}
     <h3>Edit Payment</h3>
     <div class="field"><label id="editPaidMemberLabel">Member</label></div>
     <div class="row2">
+      <div class="field"><label>Plan</label><select id="epPlan" onchange="onEditPaidPlanChange()"></select><div class="hint" id="epDurationHint"></div></div>
       <div class="field"><label>Amount (₹)</label><input type="number" id="epAmount"></div>
-      <div class="field"><label>Payment Date</label><input type="date" id="epDate"></div>
     </div>
-    <div class="field"><label>Payment Mode</label><select id="epMode"><option value="Cash">Cash</option><option value="Gpay">Gpay</option></select></div>
+    <div class="row2">
+      <div class="field"><label>Payment Date</label><input type="date" id="epDate"></div>
+      <div class="field"><label>Payment Mode</label><select id="epMode"><option value="Cash">Cash</option><option value="Gpay">Gpay</option></select></div>
+    </div>
     <div class="field"><label>Next Due Date</label><input type="date" id="epNextDue"><div class="hint">Changing this updates member_billing and the member app immediately — no manual sync needed.</div></div>
     <div class="modalFoot"><button class="btn full" onclick="savePaidEntryEdit()">Save Changes</button></div>
     <div class="errMsg" id="editPaidErr"></div>
@@ -696,6 +734,54 @@ async function doLogin(){
   enterApp();
 }
 function doLogout(){stopDashboardLive();stopDailyLiveTicker();currentAdmin=null;localStorage.removeItem('gymbro_admin');document.getElementById('app').style.display='none';document.getElementById('loginScreen').style.display='flex';}
+/* ===================== INITIAL LOAD OVERLAY (Loading / Slow network / Disconnected) =====================
+   Shown the instant the app opens or the page is refreshed (before the dashboard's data has even
+   started loading) so the person never sees blank stat cards / an empty check-in table. If the
+   network is genuinely slow, the message updates in place; if it fails outright (offline / request
+   error), a Retry screen replaces the spinner instead of leaving things blank forever. */
+function showAppLoading(state,msg){
+  const ov=document.getElementById('appLoadingOverlay');
+  ov.style.display='flex';
+  const spinner=document.getElementById('appLoadingSpinner');
+  const icon=document.getElementById('appLoadingIcon');
+  const text=document.getElementById('appLoadingText');
+  const retryBtn=document.getElementById('appLoadRetryBtn');
+  if(state==='disconnected'){
+    spinner.style.display='none';
+    icon.style.display='block';icon.textContent='📡';
+    retryBtn.style.display='inline-block';
+    text.textContent=msg||"No internet connection. Please check your network and try again.";
+  }else if(state==='slow'){
+    spinner.style.display='block';
+    icon.style.display='none';
+    retryBtn.style.display='none';
+    text.textContent=msg||'Network is slow — still loading your dashboard…';
+  }else{
+    spinner.style.display='block';
+    icon.style.display='none';
+    retryBtn.style.display='none';
+    text.textContent=msg||'Loading your dashboard…';
+  }
+}
+function hideAppLoading(){document.getElementById('appLoadingOverlay').style.display='none';}
+async function attemptInitialLoad(){
+  showAppLoading('loading');
+  if(typeof navigator!=='undefined'&&navigator.onLine===false){showAppLoading('disconnected');return;}
+  const slowTimer=setTimeout(()=>showAppLoading('slow'),3000);
+  try{
+    await loadAllData();
+    await renderDashboard(); // populate the 4 stat cards + today's check-ins fully before the page is revealed
+    clearTimeout(slowTimer);
+    hideAppLoading();
+    goPage('dashboard');
+  }catch(e){
+    clearTimeout(slowTimer);
+    console.warn('Initial dashboard load failed:',e);
+    showAppLoading('disconnected');
+  }
+}
+function retryAppLoad(){attemptInitialLoad();}
+window.addEventListener('offline',()=>{if(document.getElementById('app').style.display!=='none')showAppLoading('disconnected');});
 async function tryRestoreSession(){
   const saved=localStorage.getItem('gymbro_admin');
   if(saved){currentAdmin=JSON.parse(saved);await enterApp();}
@@ -704,8 +790,7 @@ async function enterApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('app').style.display='block';
   document.getElementById('dashAdminName').textContent=currentAdmin.username;
-  await loadAllData();
-  goPage('dashboard');
+  await attemptInitialLoad();
 }
 
 /* ===================== DATA LOADING ===================== */
@@ -723,10 +808,83 @@ async function loadAllData(){
   allAdmins=adminsRes.data||[];
   // member_billing is an optional add-on table — degrade gracefully if it doesn't exist yet.
   allMemberBilling=billingRes.error?[]:(billingRes.data||[]);
+  buildPlanColorMap();
 }
 function memberById(id){return allMembers.find(m=>m.id===id);}
 function planFor(member){return member?allPlans.find(p=>p.name===member.plan):null;}
+/* ===================== PLAN → DESIGNATED COLOR (mirrors index.html's CLASS_COLORS pattern) =====================
+   Fixed colors for the common plan names, PLUS a stable hash-based fallback palette so any newly
+   created plan (added on the Plans page) automatically gets its own consistent color too — no code
+   change needed when the admin adds a new plan. */
+const PLAN_COLORS_FIXED={'Monthly':'#3b82f6','Quarterly':'#f97316','Half-Yearly':'#8b5cf6','Yearly':'#10b981','PT':'#ec4899','Personal Training':'#ec4899'};
+const PLAN_COLOR_PALETTE=['#3b82f6','#f97316','#8b5cf6','#10b981','#ec4899','#06b6d4','#eab308','#f43f5e','#6366f1','#84cc16','#0ea5e9','#d97706','#14b8a6','#a855f7','#ef4444','#22c55e','#0284c7','#c026d3','#65a30d','#b45309'];
+/* planColorMap: assigns every plan currently in allPlans its own color, built fresh whenever
+   allPlans is (re)loaded — see buildPlanColorMap(). This guarantees two different plans never
+   share a color (e.g. a newly-added plan can no longer accidentally reuse Personal Training's
+   pink), instead of the old hash-based approach which could collide. */
+let planColorMap={};
+function buildPlanColorMap(){
+  planColorMap={};
+  const used=new Set();
+  const sorted=allPlans.slice().sort((a,b)=>(a.created_at||'').localeCompare(b.created_at||'')||String(a.id).localeCompare(String(b.id)));
+  // Pass 1: honor the recognizable fixed names first, and reserve their colors.
+  sorted.forEach(p=>{
+    if(PLAN_COLORS_FIXED[p.name]){planColorMap[p.name]=PLAN_COLORS_FIXED[p.name];used.add(PLAN_COLORS_FIXED[p.name].toLowerCase());}
+  });
+  // Pass 2: give every other plan the next color in the palette that nobody else is using yet.
+  sorted.forEach(p=>{
+    if(planColorMap[p.name])return;
+    let color=PLAN_COLOR_PALETTE.find(c=>!used.has(c.toLowerCase()));
+    if(!color){
+      // Palette exhausted (20+ distinct plans) — fall back to a deterministic hash; may repeat.
+      let hash=0;for(let i=0;i<p.name.length;i++)hash=(hash*31+p.name.charCodeAt(i))>>>0;
+      color=PLAN_COLOR_PALETTE[hash%PLAN_COLOR_PALETTE.length];
+    }
+    planColorMap[p.name]=color;
+    used.add(color.toLowerCase());
+  });
+}
+function planColorFor(planName){
+  if(!planName)return'#94a3b8'; // muted gray for "No Plan"
+  if(planColorMap[planName])return planColorMap[planName];
+  // Plan not in the current list (e.g. deleted, or map not built yet) — deterministic hash fallback.
+  if(PLAN_COLORS_FIXED[planName])return PLAN_COLORS_FIXED[planName];
+  let hash=0;
+  for(let i=0;i<planName.length;i++)hash=(hash*31+planName.charCodeAt(i))>>>0;
+  return PLAN_COLOR_PALETTE[hash%PLAN_COLOR_PALETTE.length];
+}
+function planBadgeHtml(planName){
+  return`<span class="plan-badge" style="background:${planColorFor(planName)}">${escapeHtml(planName||'No Plan')}</span>`;
+}
 function feesFor(userId){return allFees.filter(f=>f.user_id===userId);}
+/* The plan a given fee row was actually paid under — from its own saved plan_name, so it never
+   shifts when the member's current plan changes later. Falls back to the member's current plan
+   only for legacy rows recorded before plan_name existed. */
+function feePlanName(fee){
+  if(!fee)return null;
+  if(fee.plan_name)return fee.plan_name;
+  const m=memberById(fee.user_id);
+  return m?m.plan:null;
+}
+/* The plan that should count as a member's CURRENT plan: whichever plan their most-recent-by-date
+   fee row was paid under. Editing or deleting an OLDER fee's plan must never change this — only
+   adding/editing/deleting whichever fee is presently the latest one does. Requires allFees to
+   already reflect the change being reasoned about (reload/refilter before calling). */
+function latestFeePlanName(memberId){
+  const list=allFees.filter(f=>f.user_id===memberId).slice().sort((a,b)=>a.date.localeCompare(b.date));
+  return list.length?feePlanName(list[list.length-1]):null;
+}
+async function syncMemberCurrentPlanFromFees(memberId){
+  const member=memberById(memberId);
+  if(!member)return member;
+  const planName=latestFeePlanName(memberId);
+  if(planName&&member.plan!==planName){
+    const{error}=await membersDB.from('users').update({plan:planName}).eq('id',memberId);
+    if(error)console.warn('Could not update member plan:',error.message);
+    else member.plan=planName; // keep the in-memory copy in sync so Pending/Members re-render correctly
+  }
+  return member;
+}
 function billingFor(userId){return allMemberBilling.find(b=>b.user_id===userId);}
 
 /* ===================== NAVIGATION ===================== */
@@ -821,21 +979,24 @@ function renderMembers(){
   const q=(document.getElementById('memberSearch').value||'').toLowerCase();
   const list=allMembers.filter(m=>!q||String(m.login_id).includes(q)||(m.name||'').toLowerCase().includes(q)||(m.phone||'').includes(q));
   document.getElementById('membersEmpty').style.display=list.length?'none':'block';
-  document.getElementById('membersBody').innerHTML=list.map(m=>`
+  document.getElementById('membersBody').innerHTML=list.map(m=>{
+    const planColor=planColorFor(m.plan);
+    return `
     <div class="member-log-card" tabindex="0" onclick="toggleMemberCardSelection(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}">
-      <div class="mlc-box">
+      <div class="mlc-box" style="border-left-color:${planColor}">
         <div class="mlc-header-row">
           <span class="mlc-login">@${m.login_id}</span>
           <span class="mlc-name">${escapeHtml(m.name||'—')}</span>
         </div>
-        <div class="mlc-plan">${escapeHtml(m.plan||'No Plan')}</div>
+        <div class="mlc-plan">${planBadgeHtml(m.plan)}</div>
       </div>
       <div class="member-actions-overlay">
         <button class="action-icon-btn view" title="View" onclick="event.stopPropagation();viewMember('${m.id}')">${ICON_VIEW}</button>
         <button class="action-icon-btn edit" title="Edit" onclick="event.stopPropagation();openEditMember('${m.id}')">${ICON_EDIT}</button>
         <button class="action-icon-btn delete" title="Delete" onclick="event.stopPropagation();deleteMember('${m.id}')">${ICON_DELETE}</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 /* Pushes the resolved next-due date + amount — and, when a payment was just made, the paid date —
    straight onto this member's OWN row in the MEMBERS project (current_paid_date / next_due_date /
@@ -954,6 +1115,11 @@ function openEditMember(id){
   fillPlanSelect('mPlan',m.plan||'');
   openModal('memberModal');
 }
+function isDuplicatePhoneError(error){
+  if(!error)return false;
+  const msg=(error.message||'').toLowerCase();
+  return error.code==='23505'||msg.includes('duplicate')||msg.includes('already exists')||msg.includes('unique constraint')||msg.includes('phone');
+}
 async function saveMember(){
   const name=document.getElementById('mName').value.trim();
   const phone=document.getElementById('mPhone').value.trim();
@@ -965,17 +1131,22 @@ async function saveMember(){
   const btn=document.getElementById('memberSaveBtn');btn.disabled=true;
 
   if(editingMemberId){
+    // Same phone-uniqueness rule as creating a new member, just excluding this member's own row —
+    // the function's behaviour (admin can never set a duplicate number) is unchanged, only the
+    // error the admin sees is friendlier than a raw database message.
+    const{data:dupCheck}=await membersDB.from('users').select('id').eq('phone',phone).neq('id',editingMemberId);
+    if(dupCheck&&dupCheck.length>0){btn.disabled=false;errEl.textContent='The phone number is already exist, Try with other number';return;}
     const updates={name,phone,plan:plan||null};
     if(password)updates.password=password;
     const{error}=await membersDB.from('users').update(updates).eq('id',editingMemberId);
     btn.disabled=false;
-    if(error){errEl.textContent='Error: '+error.message;return;}
+    if(error){errEl.textContent=isDuplicatePhoneError(error)?'The phone number is already exist, Try with other number':'Error: '+error.message;return;}
     // Only touch member_billing if a due date was actually entered — leaving it blank means
     // "don't change the auto-tracked due date", not "clear it".
     if(customDue){
       const{error:billErr}=await adminDB.from('member_billing').upsert({user_id:editingMemberId,custom_due_date:customDue,updated_at:new Date().toISOString()});
       if(billErr)console.warn('member_billing not saved (table may not exist yet):',billErr.message);
-      await syncMemberDueToMembersApp(editingMemberId,customDue,plan||m.plan);
+      await syncMemberDueToMembersApp(editingMemberId,customDue,plan||(memberById(editingMemberId)||{}).plan);
     }
     showToast('✅ Member updated');
     await loadAllData();renderMembers();
@@ -983,14 +1154,14 @@ async function saveMember(){
   }else{
     if(!password){btn.disabled=false;errEl.textContent='Password is required for a new member.';return;}
     const{data:existing}=await membersDB.from('users').select('id,phone').eq('phone',phone);
-    if(existing&&existing.length>0){btn.disabled=false;errEl.textContent='A member with this phone number already exists.';return;}
+    if(existing&&existing.length>0){btn.disabled=false;errEl.textContent='The phone number is already exist, Try with other number';return;}
     // Auto-increment login_id continuing sequentially from the last one generated (mirrors the member app's own registration flow).
     const{data:maxRow}=await membersDB.from('users').select('login_id').order('login_id',{ascending:false}).limit(1);
     let newLoginId='1001';
     if(maxRow&&maxRow.length>0&&maxRow[0].login_id){newLoginId=String((parseInt(maxRow[0].login_id)||1000)+1);}
     const{data:inserted,error}=await membersDB.from('users').insert([{login_id:newLoginId,name,phone,password,plan:plan||null,join_date:todayStr()}]).select();
     btn.disabled=false;
-    if(error){errEl.textContent='Error: '+error.message;return;}
+    if(error){errEl.textContent=isDuplicatePhoneError(error)?'The phone number is already exist, Try with other number':'Error: '+error.message;return;}
     const newId=inserted[0].id;
     if(customDue){
       const{error:billErr}=await adminDB.from('member_billing').upsert({user_id:newId,custom_due_date:customDue,updated_at:new Date().toISOString()});
@@ -1223,13 +1394,18 @@ async function saveFee(){
   const date=document.getElementById('feeDate').value||todayStr();
   const mode=document.getElementById('feeMode').value;
   if(checkFeeDuplicate()){errEl.textContent='This member already has a payment recorded for that month.';return;}
-  const{error}=await adminDB.from('fees').insert([{user_id:feeMatchedMember.id,date,amount:plan.price,payment_mode:mode}]);
+  // Amount is editable (e.g. discounts) — falls back to the plan's list price if left blank.
+  const amount=document.getElementById('feeAmount').value===''?plan.price:Number(document.getElementById('feeAmount').value);
+  if(!amount||amount<=0){errEl.textContent='Enter a valid amount.';return;}
+  // plan_name is saved onto the fee row itself so this payment's history never shifts later,
+  // even if the member's plan changes or they get billed differently next time.
+  const{error}=await adminDB.from('fees').insert([{user_id:feeMatchedMember.id,date,amount,payment_mode:mode,plan_name:plan.name}]);
   if(error){errEl.textContent='Error: '+error.message;return;}
-  // If the admin assigned/changed the plan right here, persist it to the member's profile too.
-  if(feeMatchedMember.plan!==plan.name){
-    const{error:planErr}=await membersDB.from('users').update({plan:plan.name}).eq('id',feeMatchedMember.id);
-    if(planErr)console.warn('Could not update member plan:',planErr.message);
-  }
+  // Reload so allFees includes the row we just inserted, then re-derive the member's CURRENT plan
+  // from whichever fee is now the most recent by date. A backdated entry (e.g. logging a missed
+  // past month) must never override the plan of an already-more-recent payment.
+  await loadAllData();
+  const member=await syncMemberCurrentPlanFromFees(feeMatchedMember.id);
   // Keep exactly one member_billing row per member: default next due = same date, N months later
   // where N is THIS plan's own duration_months (Monthly=1, Quarterly=3, Yearly=12, or whatever the
   // admin set when creating/editing the plan) — unless the admin picked a custom override here.
@@ -1240,16 +1416,16 @@ async function saveFee(){
   const nextDueStr=customOverride||localDateStr(defaultNextDue);
   const{error:billErr}=await adminDB.from('member_billing').upsert({user_id:feeMatchedMember.id,custom_due_date:nextDueStr,updated_at:new Date().toISOString()});
   if(billErr)console.warn('member_billing not updated (table may not exist yet):',billErr.message);
-  await syncMemberDueToMembersApp(feeMatchedMember.id,nextDueStr,selectedPlanName,date);
+  await syncMemberDueToMembersApp(feeMatchedMember.id,nextDueStr,member?member.plan:plan.name,date);
   showToast('✅ Payment recorded');
   closeModal('feeModal');
-  await loadAllData();renderPending();renderPaid();
+  renderPending();renderPaid();
   openBillModal({
     memberName:feeMatchedMember.name,
     loginId:feeMatchedMember.login_id,
     phone:feeMatchedMember.phone,
     plan:plan.name,
-    amount:plan.price,
+    amount:amount,
     paidDate:date,
     nextDueDate:nextDueStr,
     mode
@@ -1292,16 +1468,18 @@ function computePendingList(){
 }
 function renderPending(){
   const q=(document.getElementById('pendingSearch').value||'').toLowerCase();
+  const mode=document.getElementById('pendingViewMode')?document.getElementById('pendingViewMode').value:'pending';
   const list=computePendingList()
-    .filter(p=>p.status!=='ok')
+    .filter(p=>mode==='all'?true:p.status!=='ok')
     .filter(p=>!q||String(p.member.login_id).includes(q)||(p.member.name||'').toLowerCase().includes(q)||(p.member.phone||'').includes(q))
     .sort((a,b)=>a.diffDays-b.diffDays);
+  const emptyMsg=mode==='all'?'No members found.':'🎉 No members are currently pending or overdue.';
   document.getElementById('pendingBody').innerHTML=list.length?list.map(p=>{
-    const pill=p.status==='overdue'?`<span class="pill bad">Overdue ${Math.abs(p.diffDays)}d</span>`:p.status==='today'?`<span class="pill warn">Due Today</span>`:`<span class="pill warn">Due in ${p.diffDays}d</span>`;
+    const pill=p.status==='overdue'?`<span class="pill bad">Overdue ${Math.abs(p.diffDays)}d</span>`:p.status==='today'?`<span class="pill warn">Due Today</span>`:p.status==='soon'?`<span class="pill warn">Due in ${p.diffDays}d</span>`:`<span class="pill ok">Up to date</span>`;
     return `<tr>
       <td>@${p.member.login_id}</td>
       <td>${escapeHtml(p.member.name)}</td>
-      <td>${escapeHtml(p.member.plan||'—')}</td>
+      <td>${planBadgeHtml(p.member.plan)}</td>
       <td>${p.lastPaid?formatDisplayDate(p.lastPaid.date):'Never'}</td>
       <td>${formatDisplayDate(p.nextDue)}</td>
       <td>${pill}</td>
@@ -1310,7 +1488,7 @@ function renderPending(){
         <button class="linkBtn wa" ${p.member.phone?'':'disabled'} title="${p.member.phone?'Send WhatsApp reminder':'No phone number on file'}" onclick="sendWaPending('${p.member.id}')">📱 WhatsApp</button>
       </td>
     </tr>`;
-  }).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">🎉 No members are currently pending or overdue.</td></tr>';
+  }).join(''):`<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">${emptyMsg}</td></tr>`;
 }
 
 /* ===================== WHATSAPP REMINDERS (click-to-chat, no API/service — admin taps Send once per message) ===================== */
@@ -1425,13 +1603,16 @@ function renderPaid(){
   document.getElementById('paidEmpty').textContent=paidModeFilter?`No ${paidModeFilter} payments recorded for this period.`:'No payments recorded for this period.';
   document.getElementById('paidBody').innerHTML=rows.map(r=>`
     <div class="member-log-card" tabindex="0" onclick="togglePaidCardSelection(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}">
-      <div class="mlc-box">
+      <div class="mlc-box" style="border-left-color:${planColorFor(feePlanName(r.fee))}">
         <div class="mlc-header-row">
           <span class="mlc-login">@${r.member?r.member.login_id:'—'}</span>
           <span class="mlc-name">${r.member?escapeHtml(r.member.name):'Unknown'}</span>
-          <span class="plc-amount">₹${r.fee.amount}</span>
+          <div class="plc-amount-wrap">
+            <span class="plc-amount">₹${r.fee.amount}</span>
+            <span class="plc-mode">${escapeHtml(r.fee.payment_mode)}</span>
+          </div>
         </div>
-        <div class="plc-sub">${formatDisplayDate(r.fee.date)} · ${escapeHtml(r.fee.payment_mode)}</div>
+        <div class="plc-sub">${planBadgeHtml(feePlanName(r.fee))}<span>${formatDisplayDate(r.fee.date)}</span></div>
       </div>
       <div class="member-actions-overlay">
         <button class="action-icon-btn view" title="View" onclick="event.stopPropagation();viewPaidEntry('${r.fee.id}')">${ICON_VIEW}</button>
@@ -1456,7 +1637,7 @@ function viewPaidEntry(feeId){
     memberName:member?member.name:'Unknown',
     loginId:member?member.login_id:'',
     phone:member?member.phone:'',
-    plan:member?member.plan:'—',
+    plan:feePlanName(fee)||'—',
     amount:fee.amount,
     paidDate:fee.date,
     nextDueDate:(billing&&billing.custom_due_date)?billing.custom_due_date:'',
@@ -1464,12 +1645,20 @@ function viewPaidEntry(feeId){
   });
 }
 let editingPaidFeeId=null;
+function onEditPaidPlanChange(){
+  const planName=document.getElementById('epPlan').value;
+  const plan=allPlans.find(p=>p.name===planName);
+  document.getElementById('epDurationHint').textContent=plan?`Duration: ${plan.duration_months} month${Number(plan.duration_months)===1?'':'s'}`:'';
+  if(plan)document.getElementById('epAmount').value=plan.price;
+}
 function openEditPaidEntry(feeId){
   const fee=allFees.find(f=>String(f.id)===String(feeId));
   if(!fee)return;
   editingPaidFeeId=fee.id;
   const member=memberById(fee.user_id);
   document.getElementById('editPaidMemberLabel').textContent=member?`${member.name} (@${member.login_id})`:'Unknown member';
+  fillPlanSelect('epPlan',feePlanName(fee)||'');
+  onEditPaidPlanChange();
   document.getElementById('epAmount').value=fee.amount;
   document.getElementById('epDate').value=fee.date;
   document.getElementById('epMode').value=fee.payment_mode;
@@ -1481,6 +1670,8 @@ function openEditPaidEntry(feeId){
 async function savePaidEntryEdit(){
   const fee=allFees.find(f=>f.id===editingPaidFeeId);
   if(!fee)return;
+  const planName=document.getElementById('epPlan').value;
+  const plan=allPlans.find(p=>p.name===planName);
   const amount=Number(document.getElementById('epAmount').value);
   const date=document.getElementById('epDate').value;
   const mode=document.getElementById('epMode').value;
@@ -1489,17 +1680,25 @@ async function savePaidEntryEdit(){
   const member=memberById(fee.user_id);
   if(!nextDue){
     const d=new Date(date+'T00:00:00');
-    const planMonths=Number(planFor(member)?.duration_months)||1;
+    const planMonths=Number(plan?.duration_months)||Number(planFor(member)?.duration_months)||1;
     nextDue=localDateStr(addMonthClamped(d,planMonths,d.getDate()));
   }
-  const{error:feeErr}=await adminDB.from('fees').update({amount,date,payment_mode:mode}).eq('id',fee.id);
+  // plan_name is written straight from the select's text value (not the looked-up plan object) so
+  // it still saves correctly even if that plan was since deleted from the Plans page.
+  const{error:feeErr}=await adminDB.from('fees').update({amount,date,payment_mode:mode,plan_name:planName||null}).eq('id',fee.id);
   if(feeErr){document.getElementById('editPaidErr').textContent=feeErr.message;return;}
+  // Reload so allFees reflects this edit, then re-derive the member's CURRENT plan from whichever
+  // fee is now the most recent by date. Editing an OLDER month's plan (e.g. correcting June) must
+  // never override a more recent payment's plan (e.g. July) — only editing the latest fee itself
+  // changes what shows as the member's current plan in Members/Pending.
+  await loadAllData();
+  const updatedMember=await syncMemberCurrentPlanFromFees(fee.user_id);
   const{error:billErr}=await adminDB.from('member_billing').upsert({user_id:fee.user_id,custom_due_date:nextDue,updated_at:new Date().toISOString()});
   if(billErr)console.warn('member_billing not updated:',billErr.message);
-  if(member)await syncMemberDueToMembersApp(member.id,nextDue,member.plan,date);
+  if(updatedMember)await syncMemberDueToMembersApp(updatedMember.id,nextDue,updatedMember.plan,date);
   closeModal('editPaidModal');
   showToast('✅ Payment updated');
-  await loadAllData();renderPending();renderPaid();
+  renderPending();renderPaid();
 }
 async function deletePaidEntry(feeId){
   const fee=allFees.find(f=>String(f.id)===String(feeId));
@@ -1513,6 +1712,16 @@ async function deletePaidEntry(feeId){
     // push the corrected values to member_billing AND the member app — same as a fresh sync.
     const remaining=allFees.filter(f=>f.user_id===member.id&&f.id!==fee.id).sort((a,b)=>a.date.localeCompare(b.date));
     const lastRemaining=remaining.length?remaining[remaining.length-1]:null;
+    // Deleting a fee can change which payment is now "most recent" — re-derive the member's
+    // current plan from it too, same rule as add/edit (never let an older fee dictate this).
+    if(lastRemaining){
+      const planName=feePlanName(lastRemaining);
+      if(planName&&member.plan!==planName){
+        const{error:planErr}=await membersDB.from('users').update({plan:planName}).eq('id',member.id);
+        if(planErr)console.warn('Could not update member plan:',planErr.message);
+        else member.plan=planName;
+      }
+    }
     let newNextDue;
     if(lastRemaining){
       const d=new Date(lastRemaining.date+'T00:00:00');
@@ -1532,7 +1741,7 @@ async function deletePaidEntry(feeId){
 /* ===================== PLANS ===================== */
 function renderPlans(){
   document.getElementById('plansBody').innerHTML=allPlans.map(p=>`
-    <tr><td>${escapeHtml(p.name)}</td><td>₹${p.price}</td><td>${p.duration_months}</td>
+    <tr><td>${planBadgeHtml(p.name)}</td><td>₹${p.price}</td><td>${p.duration_months}</td>
     <td><button class="linkBtn" onclick="openEditPlan('${p.id}')">Edit</button><button class="linkBtn del" onclick="deletePlan('${p.id}')">Delete</button></td></tr>
   `).join('')||'<tr><td colspan="4" style="text-align:center;color:var(--text-muted)">No plans yet.</td></tr>';
 }
